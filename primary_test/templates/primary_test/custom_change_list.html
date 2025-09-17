@@ -1,0 +1,50 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools %}
+    <ul class="object-tools">
+        <li>
+            <a href="#" onclick="window.location.href='?export=excel'; return false;" class="historylink">Экспорт в Excel</a>
+        </li>
+        <li>
+            <a href="#" onclick="window.location.href='?export=pdf'; return false;" class="historylink">Экспорт в PDF</a>
+        </li>
+    </ul>
+{% endblock %}
+
+{% block filters %}
+    <div class="module filtered-list-filter">
+        <fieldset class="module aligned collapse-closed">
+            <legend>Фильтрация</legend>
+            <form method="get">
+                {{ filter.form.as_p }}
+                <button type="submit">Фильтровать</button>
+            </form>
+        </fieldset>
+    </div>
+{% endblock %}
+
+{% block result_list %}
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">{% trans "Username" %}</th>
+                <th scope="col">{% trans "School" %}</th>
+                <th scope="col">{% trans "Class Level" %}</th>
+                <th scope="col">{% trans "Knowledge Percentage" %}</th>
+                <th scope="col">{% trans "Career Preference" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in cl.result_list %}
+                <tr>
+                    <td>{{ result.user.username }}</td>
+                    <td>{{ result.school }}</td>
+                    <td>{{ result.class_level }}</td>
+                    <td>{{ result.knowledge_percentage }}</td>
+                    <td>{{ result.career_preference }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

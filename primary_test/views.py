@@ -17,58 +17,88 @@ QUESTIONS_PER_PAGE = 5
 
 @login_required
 def block1_test_view(request, page=1):
-    block_obj = get_object_or_404(Block, number=1)  # Получаем объект первого блока
+    block_obj = get_object_or_404(Block, number=1)
     session_key = f"questions_order_{block_obj.number}_{request.user.id}"
 
-    # Если порядок вопросов ещё не зафиксирован, перемешиваем и сохраняем
+    # Генерируем случайный порядок вопросов
     if session_key not in request.session:
         all_questions = list(Question.objects.filter(block=block_obj))
         random.shuffle(all_questions)
-        request.session[session_key] = [q.id for q in all_questions]  # Сохраняем только идентификаторы
+        request.session[session_key] = [q.id for q in all_questions]
 
-    # Забираем упорядоченные вопросы из сессии
+    # Загружаем вопросы из сессии
     ordered_questions_ids = request.session[session_key]
-
-    # Создаем запрос с предварительным упорядочиванием
     ordered_questions = Question.objects.filter(id__in=ordered_questions_ids).order_by()
 
-    # Вычисляем общее число страниц
+    # Определяем текущую страницу вопросов
     total_pages = math.ceil(len(ordered_questions) / QUESTIONS_PER_PAGE)
-
-    # Определяем диапазон текущих вопросов
     start_idx = (page - 1) * QUESTIONS_PER_PAGE
     end_idx = min(start_idx + QUESTIONS_PER_PAGE, len(ordered_questions))
     current_questions = ordered_questions[start_idx:end_idx]
 
-    # Получаем выбранные ответы из сессии
-    saved_answers = request.session.get(f'saved_answers_{block_obj.number}', {})
-
-    # Подготовим готовые данные для шаблона
+    # Формируем форму с выбором ответов
     prepared_questions = []
     for question in current_questions:
         options = []
         for option in question.answeroption_set.all():
-            checked = str(saved_answers.get(str(question.id), '')) == str(option.id)
-            options.append((option, checked))
+            options.append((option, False))  # Пока отметим, что пока никто не выбрал ответ
         prepared_questions.append((question, options))
 
-    # Обрабатываем форму
+    # Обработка POST-запроса
     if request.method == 'POST':
-        cleaned_data = {}  # Сбор данных из формы
+        cleaned_data = {}
         for key, value in request.POST.items():
             if key.startswith('question_'):
-                question_id = int(key.split('_')[1])
-                cleaned_data[f'question_{question_id}'] = value
+                question_id = key.replace('question_', '')
+                try:
+                    question_id_int = int(question_id)
+                except ValueError:
+                    print(f"Ошибка при разборе ключа '{key}'. Значение: '{value}'")
+                    continue
+                else:
+                    cleaned_data[question_id_int] = value
 
-        # Сохраняем результаты
-        process_block_answers(cleaned_data, block_obj, request.user)
+        # Обработка результатов и сохранение
+        existing_result = DiagnosticResult.objects.filter(user=request.user).first()
 
-        # Завершаем первый блок и переходим на второй
-        if page == total_pages:
-            return redirect(reverse('primary_test:block2_test'))
+        if existing_result:
+            # Обновляем существующую запись
+            diagnostic_result = existing_result
         else:
+            # Создаем новую запись
+            diagnostic_result = DiagnosticResult.objects.create(
+                user=request.user,
+                block_number=block_obj.number
+            )
+
+        correct_count = 0
+        for question_id, option_id in cleaned_data.items():
+            question = Question.objects.get(id=question_id)
+            answer_option = AnswerOption.objects.get(id=int(option_id))
+            AnswerRecord.objects.create(
+                diagnostic_result=diagnostic_result,
+                question=question,
+                selected_answer=answer_option,
+                is_correct=answer_option.is_correct
+            )
+            if answer_option.is_correct:
+                correct_count += 1
+
+        # Высчитываем процент правильных ответов
+        percentage = (correct_count / len(current_questions)) * 100
+        diagnostic_result.knowledge_percentage = percentage
+        diagnostic_result.save()
+
+        # Контрольная точка
+        print("First block results saved successfully!")
+
+        # Переключение между страницами
+        if page < total_pages:
             next_page = page + 1
             return redirect(reverse('primary_test:block1_test', args=(next_page,)))
+        else:
+            # Последний блок — переходим на второй блок
+            return redirect(reverse('primary_test:block2_test'))
 
     context = {
         'prepared_questions': prepared_questions,
@@ -79,36 +109,49 @@ def block1_test_view(request, page=1):
 
 @login_required
 def block2_test_view(request):
-    block_obj = get_object_or_404(Block, number=2)  # Получаем объект второго блока
+    block_obj = get_object_or_404(Block, number=2)
     session_key = f"saved_answers_{block_obj.number}_{request.user.id}"
 
     # Получаем все вопросы второго блока
     all_questions = list(Question.objects.filter(block=block_obj))
 
-    # Получаем выбранные ответы из сессии
-    saved_answers = request.session.get(session_key, {})
-
-    # Подготовим готовые данные для шаблона
+    # Готовим подготовленную форму с отмеченными вариантами
     prepared_questions = []
     for question in all_questions:
         options = []
         for option in question.answeroption_set.all():
-            checked = str(saved_answers.get(str(question.id), '')) == str(option.id)
-            options.append((option, checked))
+            options.append((option, False))  # Изначально отметки отсутствуют
         prepared_questions.append((question, options))
 
-    # Обрабатываем форму
     if request.method == 'POST':
-        cleaned_data = {}  # Сбор данных из формы
+        cleaned_data = {}
         for key, value in request.POST.items():
             if key.startswith('question_'):
-                question_id = int(key.split('_')[1])
-                cleaned_data[f'question_{question_id}'] = value
+                cleaned_data[int(key.split('_')[1])] = value
 
-        # Сохраняем результаты
-        process_block_answers(cleaned_data, block_obj, request.user)
+        # Анализ предпочтений
+        recommendations = determine_preferences(cleaned_data)
+        career_preference = recommendations[0]
 
-        # Переходим на страницу результатов
+        # Нахождение последней записи результатов
+        latest_result = DiagnosticResult.objects.filter(user=request.user).order_by('-created_at').first()
+
+        # Обновляем существующую запись
+        if latest_result:
+            latest_result.career_preference = career_preference
+            latest_result.save()
+        else:
+            # Если по какой-то причине предыдущий результат не найден, создаем новый
+            diagnostic_result = DiagnosticResult.objects.create(
+                user=request.user,
+                block_number=block_obj.number,
+                career_preference=career_preference
+            )
+
+        # Контрольная точка
+        print("Second block results added successfully!")
+
+        # Переход на страницу результатов
         return redirect(reverse('primary_test:diagnostic_results'))
 
     context = {
@@ -158,33 +201,31 @@ def process_block_answers(cleaned_data, block_obj, user):
         )
         diagnostic_result.save()
 
-def determine_preferences(responses):
+def determine_preferences(cleaned_data):
     """
-    Анализируем предпочтения пользователя.
+    Анализируем предпочтения пользователя на основе его выборов.
     """
-    # Собираем ID популярных вариантов ответов
-    popular_options = {}
-    for resp in responses:
-        choice = resp["choice"]  # ID варианта ответа
-        if choice in popular_options:
-            popular_options[choice] += 1
-        else:
-            popular_options[choice] = 1
-
-    # Найдем самый популярный вариант
-    most_popular_option_id = max(popular_options, key=popular_options.get)
-
-    # Определим категорию на основе популярного варианта
+    # Категории специальностей
     categories = {
         1: "Кибербезопасность",
-        2: "Компьютерная графика и дизайн",
-        3: "Игровая разработка",
+        2: "Графический дизайн",
+        3: "Разработка игр",
         4: "Программирование",
-        5: "Инженерия в IT"
+        5: "IT инженерия"
     }
 
-    recommendation = categories.get(int(most_popular_option_id), "Неопределенно")
-    return recommendation, popular_options
+    # Подсчет популярности категорий
+    popularity_counts = {cat_id: 0 for cat_id in categories.keys()}
+    for option_id in cleaned_data.values():  # Получаем идентификаторы выбранных ответов
+        category_id = AnswerOption.objects.get(id=option_id).category_id
+        if category_id:
+            popularity_counts[category_id] += 1
+
+    # Выбор наиболее популярной категории
+    recommended_category_id = max(popularity_counts, key=popularity_counts.get)
+    recommendation = categories.get(recommended_category_id, "")
+
+    return recommendation, popularity_counts
 
 def save_progress(user, block_number, results):
     """Сохранение результатов в БД и формирование отчета."""
@@ -212,62 +253,23 @@ def save_progress(user, block_number, results):
 
 @login_required
 def diagnostic_results(request):
-    """
-    Итоговая страница диагностики.
-    """
-    results = DiagnosticResult.objects.filter(user=request.user).order_by('-created_at')
-    scores = []
-    for result in results:
-        if hasattr(result, 'preference'):
-            scores.append({
-                'block_number': result.block_number,
-                'preference': result.preference
-            })
-        else:
-            answers = result.answers.all()
-            percent_correct = calculate_percent_correct(answers)
-            scores.append({
-                'block_number': result.block_number,
-                'percent_correct': percent_correct
-            })
+    results = DiagnosticResult.objects.filter(user=request.user).order_by('-created_at').first()
 
-    # Расчёт общего среднего балла для блока 1
-    percent_scores = [score for score in scores if 'percent_correct' in score]
-    if percent_scores:
-        overall_score = sum(score['percent_correct'] for score in percent_scores) / len(percent_scores)
+    if results:
+        knowledge_percentage = results.knowledge_percentage
+        career_preference = results.career_preference
+        print(f"Получены результаты: {knowledge_percentage}% | {career_preference}")
     else:
-        overall_score = 0  # Если нет оценок, средний балл считаем нулевым
-
-    # Расчёт предпочтения для блока 2
-    second_block_results = [score for score in scores if 'preference' in score]
-    if second_block_results:
-        second_block_preference = second_block_results[0]['preference']
-    else:
-        second_block_preference = ""
-
-    # Проверяем, есть ли результаты тестирования
-    has_results = bool(scores)
+        knowledge_percentage = None
+        career_preference = None
+        print("Результаты не найдены.")
 
     context = {
-        'scores': scores,
-        'overall_score': overall_score,
-        'second_block_preference': second_block_preference,
-        'has_results': has_results
+        'knowledge_percentage': knowledge_percentage,
+        'career_preference': career_preference,
+        'has_results': bool(knowledge_percentage and career_preference)
     }
     return render(request, 'primary_test/results.html', context)
-
-def calculate_percent_correct(answers):
-    """Расчёт процентного соотношения правильных ответов."""
-    total = len(answers)
-    correct_count = sum([1 for ans in answers if ans.is_correct])
-    return (correct_count / total) * 100 if total > 0 else 0
-
-
-def calculate_percent_correct(answers):
-    """Расчёт процентного соотношения правильных ответов."""
-    total = len(answers)
-    correct_count = sum([1 for ans in answers if ans.is_correct])
-    return (correct_count / total) * 100 if total > 0 else 0
 
 def generate_pdf_report(user):
     """
@@ -276,12 +278,20 @@ def generate_pdf_report(user):
     buffer = BytesIO()
     p = canvas.Canvas(buffer)
     p.setFont("Helvetica", 12)
-    p.drawString(100, 800, f"Отчет для пользователя: {user.username}")
+    p.drawString(100, 800, f"Отчёт по итогам тестирования для пользователя: {user.username}")
+
+    # Основная информация
+    p.drawString(100, 750, f"Уровень подготовки: {user.diagnosticresult_set.first().knowledge_percentage}%")
+    p.drawString(100, 700, f"Рекомендуемая профессия: {user.diagnosticresult_set.first().career_preference}")
+
     p.showPage()
     p.save()
-    filename = f'{user.username}_report.pdf'
-    user.profile.report_file.save(filename, ContentFile(buffer.getvalue()))
+    pdf_bytes = buffer.getvalue()
     buffer.close()
+
+    # Сохраняем файл отчёта в профиль пользователя
+    filename = f'{user.username}_report.pdf'
+    user.profile.report_file.save(filename, ContentFile(pdf_bytes))
 
 @login_required
 def download_report(request, username):
