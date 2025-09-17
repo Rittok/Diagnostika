@@ -24,16 +24,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-kgtdb4l7slya7^io_y^h-)cu3_a#x7+i*d^d)yd+)*nrr*)nh^'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-'''
-# settings.py
 DEBUG = False
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['curs-na-IT.ru']
 
-# Добавьте обработчик ошибок
-HANDLER404 = 'your_app.views.handler404'
-'''
+SECURE_SSL_REDIRECT = True  # принудительно перенаправлять на HTTPS
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_HSTS_SECONDS = 31536000  # HSTS для защиты от downgrade атак
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
 # Application definition
 
 INSTALLED_APPS = [
@@ -86,9 +87,7 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',  #  стандартный бэкэнд
     'diagnostic.authentication_backends.EmailAuthBackend',  #  новый бэкэнд
 ]
-SESSION_COOKIE_NAME = 'sessionid'
-CSRF_COOKIE_NAME = 'csrftoken'
-CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
+
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -99,6 +98,27 @@ DATABASES = {
     }
 }
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'file': {
+            'level': 'ERROR',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/django.log'),  # Абсолютный путь к файлу лога
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+    },
+}
+
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
