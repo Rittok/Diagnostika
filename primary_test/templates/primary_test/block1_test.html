@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 
 {% block title %}Первичная оценка знаний{% endblock %}
+{% block head_extra %}
+    <script src="{% static 'js/test_blocks.js' %}"></script>
+{% endblock %}
 
 {% block content %}
 <div class="row justify-content-md-center">
@@ -8,7 +11,7 @@
         <h1 class="mb-4">Оценка уровня подготовки</h1>
         <p class="lead">Выберите правильные ответы на вопросы ниже:</p>
 
-        <form action="{% url 'primary_test:block1_test' page=page %}" method="post">
+        <form id="ajax-form" action="{% url 'primary_test:block1_test' page=page %}" method="post">
             {% csrf_token %}
             {% for question, options in prepared_questions %}
                 <div class="mb-3">
@@ -33,7 +36,7 @@
                 {% if page < total_pages %}
                     <button type="submit" class="btn btn-primary">Следующая</button>
                 {% else %}
-                    <button type="submit" class="btn btn-success">Отправить и перейти ко второму блоку</button>
+                    <button type="submit" class="btn btn-success ajax-button">Отправить и перейти ко второму блоку</button>
                 {% endif %}
             </div>
         </form>

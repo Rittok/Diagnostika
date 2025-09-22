@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 
 {% block title %}Профессиональные предпочтения{% endblock %}
+{% block head_extra %}
+    <script src="{% static 'js/test_blocks.js' %}"></script>
+{% endblock %}
 
 {% block content %}
 <div class="row justify-content-md-center">
@@ -8,7 +11,7 @@
         <h1 class="mb-4">Профессиональные предпочтения</h1>
         <p class="lead">Выберите ваши предпочтительные варианты ответов:</p>
 
-        <form action="{% url 'primary_test:block2_test' %}" method="post">
+        <form id="prof-preferences-form" action="{% url 'primary_test:block2_test' %}" method="post">
             {% csrf_token %}
             {% for question, options in prepared_questions %}
                 <div class="mb-3">
@@ -24,7 +27,7 @@
                 </div>
             {% endfor %}
 
-            <button type="submit" class="btn btn-success w-100 my-4">Отправить и просмотреть результаты</button>
+            <button type="submit" class="btn btn-success w-100 my-4 ajax-button">Отправить и просмотреть результаты</button>
         </form>
     </div>
 </div>

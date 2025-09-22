@@ -11,6 +11,8 @@ from .models import *
 import math, random
 from django.db.models import Subquery, OuterRef
 from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
 
 # Константа: количество вопросов на одну страницу
 QUESTIONS_PER_PAGE = 5
@@ -26,11 +28,11 @@ def block1_test_view(request, page=1):
         random.shuffle(all_questions)
         request.session[session_key] = [q.id for q in all_questions]
 
-    # Загружаем вопросы из сессии
+    # Загрузка вопросов из сессии
     ordered_questions_ids = request.session[session_key]
     ordered_questions = Question.objects.filter(id__in=ordered_questions_ids).order_by()
 
-    # Определяем текущую страницу вопросов
+    # Определение текущей страницы вопросов
     total_pages = math.ceil(len(ordered_questions) / QUESTIONS_PER_PAGE)
     start_idx = (page - 1) * QUESTIONS_PER_PAGE
     end_idx = min(start_idx + QUESTIONS_PER_PAGE, len(ordered_questions))
@@ -39,9 +41,7 @@ def block1_test_view(request, page=1):
     # Формируем форму с выбором ответов
     prepared_questions = []
     for question in current_questions:
-        options = []
-        for option in question.answeroption_set.all():
-            options.append((option, False))  # Пока отметим, что пока никто не выбрал ответ
+        options = [(opt, False) for opt in question.answeroption_set.all()]
         prepared_questions.append((question, options))
 
     # Обработка POST-запроса
@@ -62,10 +62,8 @@ def block1_test_view(request, page=1):
         existing_result = DiagnosticResult.objects.filter(user=request.user).first()
 
         if existing_result:
-            # Обновляем существующую запись
             diagnostic_result = existing_result
         else:
-            # Создаем новую запись
             diagnostic_result = DiagnosticResult.objects.create(
                 user=request.user,
                 block_number=block_obj.number
@@ -92,12 +90,15 @@ def block1_test_view(request, page=1):
         # Контрольная точка
         print("First block results saved successfully!")
 
-        # Переключение между страницами
+        # Возвращаем JSON-ответ при AJAX-запросе
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True, 'message': 'Результаты сохранены'})
+
+        # Обычный редирект при обычном POST-запросе
         if page < total_pages:
             next_page = page + 1
             return redirect(reverse('primary_test:block1_test', args=(next_page,)))
         else:
-            # Последний блок — переходим на второй блок
             return redirect(reverse('primary_test:block2_test'))
 
     context = {
@@ -115,12 +116,10 @@ def block2_test_view(request):
     # Получаем все вопросы второго блока
     all_questions = list(Question.objects.filter(block=block_obj))
 
-    # Готовим подготовленную форму с отмеченными вариантами
+    # Подготовленная форма с вариантами выбора
     prepared_questions = []
     for question in all_questions:
-        options = []
-        for option in question.answeroption_set.all():
-            options.append((option, False))  # Изначально отметки отсутствуют
+        options = [(opt, False) for opt in question.answeroption_set.all()]
         prepared_questions.append((question, options))
 
     if request.method == 'POST':
@@ -133,15 +132,14 @@ def block2_test_view(request):
         recommendations = determine_preferences(cleaned_data)
         career_preference = recommendations[0]
 
-        # Нахождение последней записи результатов
+        # Получаем последнюю запись результатов
         latest_result = DiagnosticResult.objects.filter(user=request.user).order_by('-created_at').first()
 
-        # Обновляем существующую запись
+        # Обновляем существующее или создаем новое
         if latest_result:
             latest_result.career_preference = career_preference
             latest_result.save()
         else:
-            # Если по какой-то причине предыдущий результат не найден, создаем новый
             diagnostic_result = DiagnosticResult.objects.create(
                 user=request.user,
                 block_number=block_obj.number,
@@ -151,7 +149,11 @@ def block2_test_view(request):
         # Контрольная точка
         print("Second block results added successfully!")
 
-        # Переход на страницу результатов
+        # AJAX-ответ при соответствующем запросе
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True, 'message': 'Выбор профессии зафиксирован'})
+
+        # Обычное перенаправление
         return redirect(reverse('primary_test:diagnostic_results'))
 
     context = {

@@ -1,6 +1,7 @@
 from django.urls import include, path
 from django.contrib import admin
-
+from django.conf.urls.static import static
+from django.conf import settings
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -9,4 +10,4 @@ urlpatterns = [
     path('intermediate_test/', include(('intermediate_test.urls','intermediate_test'),namespace ='intermediate_test')), 
     path('final_assessment/', include(('final_assessment.urls', 'final_assessment'),namespace = 'final_assessment')),
     
-]
+]+ static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
