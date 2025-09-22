@@ -143,7 +143,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '/path/to/your/project/logs/app.log',  # полый путь к файлу логов
+            'filename': '/diagnostic_project/logs/app.log',  # полый путь к файлу логов
         },
     },
     'loggers': {
